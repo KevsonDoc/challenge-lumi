@@ -1,6 +1,5 @@
 import { Request, Response } from 'express';
 import { UploadedFile } from 'express-fileupload';
-import path from 'path';
 import { HttpExeption } from '../../../infra/error/http-exeption';
 import { UploadInvoicesUseCase } from '../use-cases/upload-invoices.use-cases';
 
@@ -18,14 +17,10 @@ export class InvoicesController {
       throw new HttpExeption(['Arquivo deve ter no máximo 2 MB'], 422);
     }
 
-    await Promise.all(
-      invoicesFiles.map(invoicesFileItem => {
-        invoicesFileItem.mv(
-          path.join(__dirname, '..', '..', '..', '..', 'public', 'uploads'),
-        );
-      }),
-    );
+    await this.uploadInvoicesUseCase.execute(invoicesFiles);
 
-    return response.json({ message: 'Hello World' });
+    return response.json({
+      message: ['Upload de faturas concluído com sucesso'!],
+    });
   }
 }
