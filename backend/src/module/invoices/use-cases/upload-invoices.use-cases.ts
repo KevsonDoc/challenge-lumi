@@ -56,8 +56,7 @@ export class UploadInvoicesUseCase {
 
     return pdfs.map(invoiceItem => {
       const splitText = invoiceItem.text.split('\n');
-      console.log(splitText.map((text, index) => `${index} | ${text}`));
-      const [referenceMonth, referenceYear] = splitText[40]
+      const [referenceMonth, referenceYear] = splitText[44]
         .trimStart()
         .trimEnd()
         .split(/\s+/)[0]
@@ -73,7 +72,7 @@ export class UploadInvoicesUseCase {
         .split(/\s+/);
 
       return {
-        customerNumber: splitText[38].trimStart().split(/\s+/)[0],
+        customerNumber: splitText[42].trimStart().split(/\s+/)[0],
         referenceMonth: MonthEnum[referenceMonth as keyof typeof MonthEnum],
         referenceYear: this.convertStringToNumber(referenceYear),
         electricity: {

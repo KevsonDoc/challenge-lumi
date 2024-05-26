@@ -17,10 +17,8 @@ export class InvoicesController {
       throw new HttpExeption(['Arquivo deve ter no máximo 2 MB'], 422);
     }
 
-    await this.uploadInvoicesUseCase.execute(invoicesFiles);
+    const data = await this.uploadInvoicesUseCase.execute(invoicesFiles);
 
-    return response.json({
-      message: ['Upload de faturas concluído com sucesso'!],
-    });
+    return response.json(data);
   }
 }
