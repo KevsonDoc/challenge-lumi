@@ -3,11 +3,17 @@ import { UploadedFile } from 'express-fileupload';
 import { HttpExeption } from '../../../infra/error/http-exeption';
 import { UploadInvoicesUseCase } from '../use-cases/upload-invoices.use-cases';
 
-export class InvoicesController {
+export class UploadInvoicesController {
   constructor(private readonly uploadInvoicesUseCase: UploadInvoicesUseCase) {}
 
   public async create(request: Request, response: Response) {
-    const invoicesFiles = request.files?.invoicesFiles as UploadedFile[];
+    const invoicesFiles = request.files?.invoicesFiles as
+      | UploadedFile[]
+      | undefined;
+
+    if (invoicesFiles === undefined) {
+      throw new HttpExeption(['Compo arquivo é obrigatório'], 422);
+    }
 
     if (
       invoicesFiles.find(
@@ -19,6 +25,6 @@ export class InvoicesController {
 
     const data = await this.uploadInvoicesUseCase.execute(invoicesFiles);
 
-    return response.json(data);
+    return response.json(data).status(201);
   }
 }

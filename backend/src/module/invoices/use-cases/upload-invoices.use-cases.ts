@@ -1,6 +1,6 @@
 import { UploadedFile } from 'express-fileupload';
 import path from 'path';
-import uuid from 'uuid';
+import * as uuid from 'uuid';
 import { HttpExeption } from '../../../infra/error/http-exeption';
 import { IInvoicesRepositoriesGatway } from '../gateways/invoices.repositories';
 import { IPdfGateway } from '../gateways/pdf.gateway';
@@ -20,10 +20,6 @@ const MonthEnum = {
   DEZ: 12,
 } as const;
 
-interface UploadedFileParams extends UploadedFile {
-  path: string;
-}
-
 export class UploadInvoicesUseCase {
   constructor(
     private readonly pdfAdapter: IPdfGateway,
@@ -40,28 +36,11 @@ export class UploadInvoicesUseCase {
     return convertedNumber;
   }
 
-  private async moveToLocalStorage(
-    pdfFiles: UploadedFileParams,
-  ): Promise<void> {
-    const clientFilePath = path.join(
-      __dirname,
-      '..',
-      '..',
-      '..',
-      '..',
-      'public',
-      'uploads',
-      pdfFiles.path,
-    );
-
-    return pdfFiles.mv(clientFilePath);
-  }
-
   private async dataNormalization(pdfBuffer: Buffer) {
     const invoice = await this.pdfAdapter.extract(pdfBuffer);
 
     const splitText = invoice.text.split('\n');
-    const [referenceMonth, referenceYear] = splitText[44]
+    const [referenceMonth, referenceYear] = splitText[40]
       .trimStart()
       .trimEnd()
       .split(/\s+/)[0]
@@ -77,8 +56,8 @@ export class UploadInvoicesUseCase {
       .split(/\s+/);
 
     return {
-      customerNumber: splitText[42].trimStart().split(/\s+/)[0],
-      name: '',
+      customerNumber: splitText[38].trimStart().split(/\s+/)[0],
+      name: splitText[32].trimStart().trimEnd(),
       referenceMonth: MonthEnum[referenceMonth as keyof typeof MonthEnum],
       referenceYear: this.convertStringToNumber(referenceYear),
       electricity: {
@@ -112,6 +91,8 @@ export class UploadInvoicesUseCase {
       });
 
       const pathFile = path.join(
+        'public',
+        'uploads',
         'invoices',
         normalizedData.customerNumber,
         uuid.v4(),
@@ -166,5 +147,6 @@ export class UploadInvoicesUseCase {
         await pdfFile.mv(pathFile);
       }
     }
+    return { message: ['Upload de arquivo concluído'] };
   }
 }

@@ -1,5 +1,6 @@
 import { Database } from '../../../infra/database';
 import {
+  ICustomer,
   IInvoicesModel,
   IInvoicesRepositoriesGatway,
 } from '../gateways/invoices.repositories';
@@ -11,6 +12,7 @@ export class InvoicesRepositories implements IInvoicesRepositoriesGatway {
     year: number;
   }): Promise<IInvoicesModel | null> {
     const database = new Database();
+
     return database.prisma.invoices.findFirst({
       where: {
         customerNumber: query.customerNumber,
@@ -38,5 +40,31 @@ export class InvoicesRepositories implements IInvoicesRepositoriesGatway {
       },
       data: invoice,
     });
+  }
+
+  public async findInvoicesByYear(query: {
+    customerNumber: string;
+    year: number;
+  }): Promise<IInvoicesModel[]> {
+    const database = new Database();
+
+    return database.prisma.invoices.findMany({
+      where: {
+        customerNumber: query.customerNumber,
+        referenceYear: query.year,
+      },
+    });
+  }
+
+  public async findCustomer(): Promise<ICustomer[]> {
+    const database = new Database();
+    const customer = await database.prisma.invoices.findMany({
+      distinct: ['customerNumber'],
+    });
+
+    return customer.map(({ customerNumber, name }) => ({
+      customerNumber,
+      name,
+    }));
   }
 }

@@ -1,6 +1,6 @@
-import 'express-async-errors';
 import { config } from 'dotenv';
 import express, { Express, NextFunction, Request, Response } from 'express';
+import 'express-async-errors';
 import { HttpExeption } from '../error/http-exeption';
 import { route } from '../routes';
 

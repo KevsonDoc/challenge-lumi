@@ -19,12 +19,22 @@ export interface IInvoicesModel {
   updatedAt: Date;
 }
 
+export interface ICustomer {
+  customerNumber: string;
+  name: string;
+}
+
 export interface IInvoicesRepositoriesGatway {
   findInvoices(params: {
     customerNumber: string;
     month: number;
     year: number;
   }): Promise<IInvoicesModel | null>;
+  findInvoicesByYear(query: {
+    customerNumber: string;
+    year: number;
+  }): Promise<IInvoicesModel[]>;
+  findCustomer(): Promise<ICustomer[]>;
 
   save(invoice: Partial<IInvoicesModel>): Promise<void>;
   update(id: string, invoice: Partial<IInvoicesModel>): Promise<void>;

@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import { PdfAdapter } from '../adapters/pdf.adapter';
 import { UploadInvoicesUseCase } from '../use-cases/upload-invoices.use-cases';
-import { InvoicesController } from '../controllers/invoices.controllers';
+import { UploadInvoicesController } from '../controllers/upload-invoices.controllers';
 import { InvoicesRepositories } from '../repositories/invoices.repositories';
 
 export const uploadInvoicesFactory = (request: Request, response: Response) => {
@@ -11,7 +11,9 @@ export const uploadInvoicesFactory = (request: Request, response: Response) => {
     pdfAdapter,
     invoiceRepositories,
   );
-  const invoicesController = new InvoicesController(uploadInvoicesUseCase);
+  const invoicesController = new UploadInvoicesController(
+    uploadInvoicesUseCase,
+  );
 
   return invoicesController.create(request, response);
 };
