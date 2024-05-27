@@ -1,6 +1,8 @@
 import { UploadedFile } from 'express-fileupload';
 import path from 'path';
+import uuid from 'uuid';
 import { HttpExeption } from '../../../infra/error/http-exeption';
+import { IInvoicesRepositoriesGatway } from '../gateways/invoices.repositories';
 import { IPdfGateway } from '../gateways/pdf.gateway';
 
 const MonthEnum = {
@@ -18,8 +20,15 @@ const MonthEnum = {
   DEZ: 12,
 } as const;
 
+interface UploadedFileParams extends UploadedFile {
+  path: string;
+}
+
 export class UploadInvoicesUseCase {
-  constructor(private readonly pdfAdapter: IPdfGateway) {}
+  constructor(
+    private readonly pdfAdapter: IPdfGateway,
+    private readonly invoiceRepositories: IInvoicesRepositoriesGatway,
+  ) {}
 
   private convertStringToNumber(value: string): number {
     const convertedNumber = +value.replace('.', '').replace(',', '.');
@@ -31,74 +40,131 @@ export class UploadInvoicesUseCase {
     return convertedNumber;
   }
 
-  private async moveToLocalStorage(pdfFiles: UploadedFile[]): Promise<void> {
-    await Promise.all(
-      pdfFiles.map(pdfFileItem => {
-        const clientFilePath = path.join(
-          __dirname,
-          '..',
-          '..',
-          '..',
-          '..',
-          'public',
-          'uploads',
-        );
-
-        return pdfFileItem.mv(clientFilePath);
-      }),
+  private async moveToLocalStorage(
+    pdfFiles: UploadedFileParams,
+  ): Promise<void> {
+    const clientFilePath = path.join(
+      __dirname,
+      '..',
+      '..',
+      '..',
+      '..',
+      'public',
+      'uploads',
+      pdfFiles.path,
     );
+
+    return pdfFiles.mv(clientFilePath);
   }
 
-  private async dataNormalization(pdfBuffer: Buffer[]) {
-    const pdfs = await Promise.all(
-      pdfBuffer.map(pdfItem => this.pdfAdapter.extract(pdfItem)),
-    );
+  private async dataNormalization(pdfBuffer: Buffer) {
+    const invoice = await this.pdfAdapter.extract(pdfBuffer);
 
-    return pdfs.map(invoiceItem => {
-      const splitText = invoiceItem.text.split('\n');
-      const [referenceMonth, referenceYear] = splitText[44]
-        .trimStart()
-        .trimEnd()
-        .split(/\s+/)[0]
-        .split('/');
-      const electricity = splitText[5].trimStart().trimEnd().split(/\s+/);
-      const SCEEEnergyWithoutICMS = splitText[6]
-        .trimStart()
-        .trimEnd()
-        .split(/\s+/);
-      const compensatedEnergyGDI = splitText[7]
-        .trimStart()
-        .trimEnd()
-        .split(/\s+/);
+    const splitText = invoice.text.split('\n');
+    const [referenceMonth, referenceYear] = splitText[44]
+      .trimStart()
+      .trimEnd()
+      .split(/\s+/)[0]
+      .split('/');
+    const electricity = splitText[5].trimStart().trimEnd().split(/\s+/);
+    const SCEEEnergyWithoutICMS = splitText[6]
+      .trimStart()
+      .trimEnd()
+      .split(/\s+/);
+    const compensatedEnergyGDI = splitText[7]
+      .trimStart()
+      .trimEnd()
+      .split(/\s+/);
 
-      return {
-        customerNumber: splitText[42].trimStart().split(/\s+/)[0],
-        referenceMonth: MonthEnum[referenceMonth as keyof typeof MonthEnum],
-        referenceYear: this.convertStringToNumber(referenceYear),
-        electricity: {
-          amount: this.convertStringToNumber(electricity[2]),
-          unitPrice: this.convertStringToNumber(electricity[3]),
-          value: this.convertStringToNumber(electricity[4]),
-        },
-        SCEEEnergyWithoutICMS: {
-          amount: this.convertStringToNumber(SCEEEnergyWithoutICMS[4]),
-          unitPrice: this.convertStringToNumber(SCEEEnergyWithoutICMS[5]),
-          value: this.convertStringToNumber(SCEEEnergyWithoutICMS[6]),
-        },
-        compensatedEnergyGDI: {
-          amount: this.convertStringToNumber(compensatedEnergyGDI[4]),
-          unitPrice: this.convertStringToNumber(compensatedEnergyGDI[5]),
-          value: this.convertStringToNumber(compensatedEnergyGDI[6]),
-        },
-        contribMunicipalPublicLight: this.convertStringToNumber(
-          splitText[8].trimStart().trimEnd().split(/\s+/)[4],
-        ),
-      };
-    });
+    return {
+      customerNumber: splitText[42].trimStart().split(/\s+/)[0],
+      name: '',
+      referenceMonth: MonthEnum[referenceMonth as keyof typeof MonthEnum],
+      referenceYear: this.convertStringToNumber(referenceYear),
+      electricity: {
+        amount: this.convertStringToNumber(electricity[2]),
+        unitPrice: this.convertStringToNumber(electricity[3]),
+        value: this.convertStringToNumber(electricity[4]),
+      },
+      SCEEEnergyWithoutICMS: {
+        amount: this.convertStringToNumber(SCEEEnergyWithoutICMS[4]),
+        unitPrice: this.convertStringToNumber(SCEEEnergyWithoutICMS[5]),
+        value: this.convertStringToNumber(SCEEEnergyWithoutICMS[6]),
+      },
+      compensatedEnergyGDI: {
+        amount: this.convertStringToNumber(compensatedEnergyGDI[4]),
+        unitPrice: this.convertStringToNumber(compensatedEnergyGDI[5]),
+        value: this.convertStringToNumber(compensatedEnergyGDI[6]),
+      },
+      publicLightingContribution: this.convertStringToNumber(
+        splitText[8].trimStart().trimEnd().split(/\s+/)[4],
+      ),
+    };
   }
 
   public async execute(pdfFiles: UploadedFile[]) {
-    await this.moveToLocalStorage(pdfFiles);
-    return this.dataNormalization(pdfFiles.map(({ data }) => data));
+    for await (const pdfFile of pdfFiles) {
+      const normalizedData = await this.dataNormalization(pdfFile.data);
+      const invoice = await this.invoiceRepositories.findInvoices({
+        customerNumber: normalizedData.customerNumber,
+        month: normalizedData.referenceMonth,
+        year: normalizedData.referenceYear,
+      });
+
+      const pathFile = path.join(
+        'invoices',
+        normalizedData.customerNumber,
+        uuid.v4(),
+      );
+
+      if (invoice) {
+        await this.invoiceRepositories.update(invoice.id, {
+          name: normalizedData.name,
+          referenceMonth: normalizedData.referenceMonth,
+          referenceYear: normalizedData.referenceYear,
+          electricityAmount: normalizedData.electricity.amount,
+          electricityUnitPrice: normalizedData.electricity.unitPrice,
+          electricityValue: normalizedData.electricity.value,
+          SCEEEnergyWithoutICMSAmount:
+            normalizedData.SCEEEnergyWithoutICMS.amount,
+          SCEEEnergyWithoutICMSUnitPrice:
+            normalizedData.SCEEEnergyWithoutICMS.unitPrice,
+          SCEEEnergyWithoutICMSValue:
+            normalizedData.SCEEEnergyWithoutICMS.value,
+          compensatedEnergyGDIAmount:
+            normalizedData.compensatedEnergyGDI.amount,
+          compensatedEnergyGDIUnitPrice:
+            normalizedData.compensatedEnergyGDI.unitPrice,
+          compensatedEnergyGDIValue: normalizedData.compensatedEnergyGDI.value,
+          publicLightingContribution: normalizedData.publicLightingContribution,
+          path: pathFile,
+        });
+        await pdfFile.mv(pathFile);
+      } else {
+        await this.invoiceRepositories.save({
+          customerNumber: normalizedData.customerNumber,
+          name: normalizedData.name,
+          referenceMonth: normalizedData.referenceMonth,
+          referenceYear: normalizedData.referenceYear,
+          electricityAmount: normalizedData.electricity.amount,
+          electricityUnitPrice: normalizedData.electricity.unitPrice,
+          electricityValue: normalizedData.electricity.value,
+          SCEEEnergyWithoutICMSAmount:
+            normalizedData.SCEEEnergyWithoutICMS.amount,
+          SCEEEnergyWithoutICMSUnitPrice:
+            normalizedData.SCEEEnergyWithoutICMS.unitPrice,
+          SCEEEnergyWithoutICMSValue:
+            normalizedData.SCEEEnergyWithoutICMS.value,
+          compensatedEnergyGDIAmount:
+            normalizedData.compensatedEnergyGDI.amount,
+          compensatedEnergyGDIUnitPrice:
+            normalizedData.compensatedEnergyGDI.unitPrice,
+          compensatedEnergyGDIValue: normalizedData.compensatedEnergyGDI.value,
+          publicLightingContribution: normalizedData.publicLightingContribution,
+          path: pathFile,
+        });
+        await pdfFile.mv(pathFile);
+      }
+    }
   }
 }
